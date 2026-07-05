@@ -74,8 +74,10 @@ function initEventListeners() {
     });
   }
 
+  // "Copy Link" copies our clean system URL (/video/{id}), not the raw
+  // download link. "Copy Stream" gives the direct stream URL for external players.
   $('btn-copy-dl')?.addEventListener('click', () => {
-    copyToClipboard($('btn-dl')?.href, 'Download link copied!');
+    copyToClipboard(getSystemShareUrl(), 'Link copied!');
   });
   $('btn-copy-stream')?.addEventListener('click', () => {
     copyToClipboard(playerStreamUrl(), 'Stream link copied!');
@@ -334,14 +336,34 @@ function showError(title, message) {
 // SHARE / QR / CLIPBOARD / TOAST / UTILS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Build a shareable link that points at OUR system (this player page for the
-// current video) — never the raw third-party download link.
+// Extract the clean TeraBox share id (surl without the leading "1") from a URL.
+function getTeraboxId(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    let surl = u.searchParams.get('surl') || '';
+    if (!surl) {
+      const m = u.pathname.match(/\/s\/([A-Za-z0-9_-]+)/);
+      if (m) {
+        surl = m[1];
+      } else {
+        const seg = u.pathname.split('/').filter(Boolean).pop();
+        if (seg) surl = seg;
+      }
+    }
+    surl = surl.replace(/[^A-Za-z0-9_-]/g, '');
+    return surl.replace(/^1/, '');
+  } catch { return ''; }
+}
+
+// Build a clean, branded, shareable link (e.g. https://oursite.com/video/{id})
+// that points at OUR system — never the raw third-party download link.
 function getSystemShareUrl() {
   const origin = window.location.origin;
-  const path   = window.location.pathname;          // e.g. /player.php
-  const source = $('source-url')?.value?.trim() || '';
-  if (source) return origin + path + '?v=' + encodeURIComponent(source);
-  // The current URL already contains ?v= when opened from the downloader
+  const id = ($('video-id')?.value?.trim()) ||
+             getTeraboxId($('source-url')?.value?.trim() || '');
+  if (id) return origin + '/video/' + id;
+  // The current URL already identifies the video when opened via ?v=
   return window.location.href;
 }
 
@@ -361,30 +383,39 @@ function shareOn(platform) {
 }
 
 function generateQR() {
-  const canvas = $('qr-canvas');
-  if (!canvas) return;
+  const box = $('qr-code');
+  if (!box) return;
 
-  // Encode the short system URL (NOT the long direct download link, which can
-  // overflow QR capacity and cause generation to fail silently).
+  // Encode our short system URL (/video/{id}) — short + always scannable.
   const qrTarget = getSystemShareUrl();
+  box.innerHTML = '';
 
-  if (typeof QRCode === 'undefined') {
-    console.error('QRCode library not loaded.');
-    showToast('QR Unavailable', 'Could not load the QR generator. Please try again.', 'warning');
-    return;
+  // Primary: qrcodejs (renders a canvas + img into the container element).
+  if (typeof QRCode !== 'undefined' && QRCode.CorrectLevel) {
+    try {
+      new QRCode(box, {
+        text: qrTarget,
+        width: 200,
+        height: 200,
+        colorDark: '#0d6efd',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+      return;
+    } catch (e) {
+      console.error('QR library error:', e);
+    }
   }
 
-  QRCode.toCanvas(canvas, qrTarget, {
-    width: 200,
-    margin: 2,
-    errorCorrectionLevel: 'M',
-    color: { dark: '#0d6efd', light: '#ffffff' },
-  }, (err) => {
-    if (err) {
-      console.error('QR error:', err);
-      showToast('QR Error', 'Failed to generate the QR code.', 'danger');
-    }
-  });
+  // Fallback: external QR image service (allowed by CSP img-src https:).
+  const img = document.createElement('img');
+  img.width = 200;
+  img.height = 200;
+  img.alt = 'QR code';
+  img.loading = 'lazy';
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' +
+            encodeURIComponent(qrTarget);
+  box.appendChild(img);
 }
 
 async function copyToClipboard(text, successMsg) {

@@ -109,6 +109,50 @@ function is_valid_terabox_url(string $url): bool {
 }
 
 /**
+ * Extract the TeraBox share id (surl) from a URL, stripping the leading "1"
+ * that TeraBox prefixes to share ids. Used to build clean /video/{id} URLs.
+ *
+ * e.g. https://terabox.com/s/1Vq9Bq0Nq0V8hZe  → "Vq9Bq0Nq0V8hZe"
+ *      https://terabox.com/sharing/link?surl=1Vq9Bq0Nq0V8hZe → "Vq9Bq0Nq0V8hZe"
+ */
+function terabox_id_from_url(string $url): string {
+    $surl = '';
+
+    // 1) ?surl= query parameter
+    $query = parse_url($url, PHP_URL_QUERY);
+    if ($query) {
+        parse_str($query, $params);
+        if (!empty($params['surl'])) {
+            $surl = (string) $params['surl'];
+        }
+    }
+
+    // 2) /s/{surl} path segment (or last path segment as a fallback)
+    if ($surl === '') {
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        if (preg_match('#/s/([A-Za-z0-9_-]+)#', $path, $m)) {
+            $surl = $m[1];
+        } else {
+            $segments = array_values(array_filter(explode('/', $path)));
+            if ($segments) {
+                $surl = end($segments);
+            }
+        }
+    }
+
+    $surl = preg_replace('/[^A-Za-z0-9_-]/', '', $surl);
+    return preg_replace('/^1/', '', $surl); // drop the leading "1" prefix
+}
+
+/**
+ * Rebuild a canonical TeraBox share URL from a clean /video/{id} id.
+ */
+function terabox_url_from_id(string $id): string {
+    $id = preg_replace('/[^A-Za-z0-9_-]/', '', $id);
+    return 'https://www.terabox.com/s/1' . $id;
+}
+
+/**
  * Simple file-based rate limiter.
  * Returns true if the request is allowed, false if rate-limited.
  */

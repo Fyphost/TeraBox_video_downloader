@@ -19,6 +19,9 @@
   # Friendly URL: /download → api/download.php (if needed)
   RewriteRule ^download$ api/download.php [L,QSA]
 
+  # Friendly video URL: /video/{id} → player.php?id={id}
+  RewriteRule ^video/([A-Za-z0-9_-]+)/?$ player.php?id=$1 [L,QSA]
+
   # Block access to hidden files (except .htaccess)
   RewriteCond %{SCRIPT_FILENAME} -d [OR]
   RewriteCond %{SCRIPT_FILENAME} -f

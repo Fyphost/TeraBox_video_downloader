@@ -839,7 +839,9 @@ footer {
 .btn-close { filter: none !important; }
 [data-theme="dark"] .btn-close { filter: invert(1) !important; }
 
-#qr-canvas { border-radius: 12px; }
+#qr-code { border-radius: 12px; line-height: 0; }
+#qr-code img,
+#qr-code canvas { border-radius: 12px; }
 
 
 /* ── Keyframe Animations ─────────────────────────────────────── */

@@ -50,7 +50,7 @@ const DOM = {
   scrollTop:      () => document.getElementById('scroll-top'),
   navbar:         () => document.getElementById('mainNavbar'),
   clearHistory:   () => document.getElementById('clear-history'),
-  qrCanvas:       () => document.getElementById('qr-canvas'),
+  qrBox:          () => document.getElementById('qr-code'),
 };
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -117,9 +117,11 @@ function initEventListeners() {
     }
   });
 
-  // Copy buttons
+  // Copy buttons — "Copy Link" copies our clean system URL (/video/{id}),
+  // NOT the long third-party download link. "Copy Stream" gives the raw
+  // stream URL for use in external players.
   DOM.btnCopyDl()?.addEventListener('click', () => {
-    copyToClipboard(DOM.btnDl()?.href, 'Download link copied!');
+    copyToClipboard(getSystemShareUrl(), 'Link copied!');
   });
   DOM.btnCopyStream()?.addEventListener('click', () => {
     copyToClipboard(getStreamUrl(currentData), 'Stream link copied!');
@@ -198,10 +200,11 @@ async function handleDownload() {
       throw new Error(json.error || `Server error (HTTP ${response.status})`);
     }
 
-    // Success – display result
+    // Success – update history first (changes layout below the result), then
+    // reveal + scroll to the video overview so the scroll target is accurate.
     currentData = json.data;
-    displayResult(currentData);
     addToHistory(currentData, url);
+    displayResult(currentData);
     showToast('Success!', 'Video link fetched successfully.', 'success');
 
   } catch (err) {
@@ -252,9 +255,17 @@ function displayResult(data) {
   const btnStream = DOM.btnStream();
   if (btnStream) btnStream.href = 'player.php';
 
-  // Show section
+  // Show section, then scroll to the video overview once layout has settled.
+  // Deferring to the next frame + offsetting for the fixed navbar prevents the
+  // page from overshooting past the result into the "Recent Downloads" area.
   section.style.display = 'block';
-  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  requestAnimationFrame(() => {
+    const navH = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--navbar-h'), 10
+    ) || 64;
+    const top = section.getBoundingClientRect().top + window.scrollY - navH - 12;
+    window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+  });
 }
 
 function populateQualityDropdown(data) {
@@ -326,17 +337,23 @@ function openPlayerPage() {
     return;
   }
 
+  const source = DOM.videoUrl()?.value?.trim() || '';
+
   try {
+    // Instant handoff — persists across navigation so playback starts without
+    // a second API call, even though the address bar shows the pretty URL.
     sessionStorage.setItem('tbdl_player', JSON.stringify({
       data: currentData,
-      source: DOM.videoUrl()?.value?.trim() || '',
+      source,
       time: Date.now(),
     }));
-  } catch { /* sessionStorage may be unavailable – player will re-fetch via ?v= */ }
+  } catch { /* sessionStorage may be unavailable – player will re-fetch */ }
 
-  // Pass the original link as a fallback so the player can re-fetch if needed
-  const source = DOM.videoUrl()?.value?.trim() || '';
-  const target = source ? `player.php?v=${encodeURIComponent(source)}` : 'player.php';
+  // Navigate to the clean /video/{id} URL when we can parse an id.
+  const id = getTeraboxId(source);
+  const target = id
+    ? `/video/${id}`
+    : (source ? `player.php?v=${encodeURIComponent(source)}` : 'player.php');
   window.location.href = target;
 }
 
@@ -615,17 +632,39 @@ function timeAgo(timestamp) {
 // SHARE BUTTONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Build a shareable link that points at OUR system (the player page for this
-// video) — never the raw third-party download link. Keeps links short + branded.
+// Extract the clean TeraBox share id (surl without the leading "1") from a URL.
+// e.g. https://terabox.com/s/1Vq9Bq0Nq0V8hZe → "Vq9Bq0Nq0V8hZe"
+function getTeraboxId(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    let surl = u.searchParams.get('surl') || '';
+    if (!surl) {
+      const m = u.pathname.match(/\/s\/([A-Za-z0-9_-]+)/);
+      if (m) {
+        surl = m[1];
+      } else {
+        const seg = u.pathname.split('/').filter(Boolean).pop();
+        if (seg) surl = seg;
+      }
+    }
+    surl = surl.replace(/[^A-Za-z0-9_-]/g, '');
+    return surl.replace(/^1/, '');
+  } catch { return ''; }
+}
+
+// Build a clean, branded, shareable link that points at OUR system
+// (e.g. https://oursite.com/video/Vq9Bq0Nq0V8hZe) — never the raw
+// third-party download link.
 function getSystemShareUrl() {
   const origin = window.location.origin;
-  // Directory of the current page, e.g. "/" or "/subdir/"
-  const dir = window.location.pathname.replace(/[^/]*$/, '');
   const source = DOM.videoUrl()?.value?.trim() || '';
+  const id = getTeraboxId(source);
 
-  let url = origin + dir + 'player.php';
-  if (source) url += '?v=' + encodeURIComponent(source);
-  return url;
+  if (id) return origin + '/video/' + id;
+  // Fallback: player page with the raw source (if id couldn't be parsed)
+  if (source) return origin + '/player.php?v=' + encodeURIComponent(source);
+  return origin + '/';
 }
 
 function shareOn(platform) {
@@ -663,30 +702,39 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function generateQR() {
-  const canvas = DOM.qrCanvas();
-  if (!canvas) return;
+  const box = DOM.qrBox();
+  if (!box) return;
 
-  // Encode our short system URL (NOT the long direct download link, which can
-  // exceed QR capacity and cause generation to fail).
+  // Encode our short system URL (/video/{id}) — short + always scannable.
   const qrTarget = getSystemShareUrl();
+  box.innerHTML = '';
 
-  if (typeof QRCode === 'undefined') {
-    console.error('QRCode library not loaded.');
-    showToast('QR Unavailable', 'Could not load the QR generator. Please try again.', 'warning');
-    return;
+  // Primary: qrcodejs (renders a canvas + img into the container element).
+  if (typeof QRCode !== 'undefined' && QRCode.CorrectLevel) {
+    try {
+      new QRCode(box, {
+        text: qrTarget,
+        width: 200,
+        height: 200,
+        colorDark: '#0d6efd',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+      return;
+    } catch (e) {
+      console.error('QR library error:', e);
+    }
   }
 
-  QRCode.toCanvas(canvas, qrTarget, {
-    width: 200,
-    margin: 2,
-    errorCorrectionLevel: 'M',
-    color: { dark: '#0d6efd', light: '#ffffff' },
-  }, (err) => {
-    if (err) {
-      console.error('QR generation error:', err);
-      showToast('QR Error', 'Failed to generate the QR code.', 'danger');
-    }
-  });
+  // Fallback: external QR image service (allowed by CSP img-src https:).
+  const img = document.createElement('img');
+  img.width = 200;
+  img.height = 200;
+  img.alt = 'QR code';
+  img.loading = 'lazy';
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' +
+            encodeURIComponent(qrTarget);
+  box.appendChild(img);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

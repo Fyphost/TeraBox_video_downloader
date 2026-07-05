@@ -527,7 +527,7 @@ $canonicalUrl = $siteUrl . '/';
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body py-4">
-        <canvas id="qr-canvas" width="200" height="200" style="max-width:100%;"></canvas>
+        <div id="qr-code" class="d-inline-block"></div>
         <p class="mt-2 text-muted" style="font-size:.8rem;">Scan to open this video on your phone</p>
       </div>
     </div>
@@ -562,8 +562,8 @@ $canonicalUrl = $siteUrl . '/';
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous" defer></script>
 
-<!-- QRCode library (lightweight) -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" defer></script>
+<!-- QRCode library (reliable, renders into #qr-code) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 
 <!-- App JS -->
 <script src="assets/js/app.js" defer></script>

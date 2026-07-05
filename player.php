@@ -11,10 +11,20 @@ require_once __DIR__ . '/config.php';
 
 $csrfToken    = csrf_token();
 $siteUrl      = rtrim(SITE_URL, '/');
-$canonicalUrl = $siteUrl . '/player.php';
 
-// Read optional source URL from query string (validated client-side + server-side on fetch)
-$sourceUrl = isset($_GET['v']) ? trim((string) $_GET['v']) : '';
+// Accept either a friendly /video/{id} route (?id=) or a legacy ?v=<url>.
+$videoId   = isset($_GET['id']) ? preg_replace('/[^A-Za-z0-9_-]/', '', (string) $_GET['id']) : '';
+$sourceUrl = isset($_GET['v'])  ? trim((string) $_GET['v']) : '';
+
+if ($videoId !== '' && $sourceUrl === '') {
+    // Reconstruct the TeraBox URL from the clean id so the API can be queried.
+    $sourceUrl = terabox_url_from_id($videoId);
+} elseif ($videoId === '' && $sourceUrl !== '') {
+    // Derive a clean id from the raw URL so share/QR links stay pretty.
+    $videoId = terabox_id_from_url($sourceUrl);
+}
+
+$canonicalUrl = $videoId !== '' ? ($siteUrl . '/video/' . $videoId) : ($siteUrl . '/player.php');
 ?>
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
@@ -85,6 +95,7 @@ $sourceUrl = isset($_GET['v']) ? trim((string) $_GET['v']) : '';
 <!-- Hidden state for JS -->
 <input type="hidden" id="csrf-token" value="<?= e($csrfToken) ?>">
 <input type="hidden" id="source-url" value="<?= e($sourceUrl) ?>">
+<input type="hidden" id="video-id"   value="<?= e($videoId) ?>">
 
 
 <!-- ════════════════════════════════════════════════════════════
@@ -188,7 +199,7 @@ $sourceUrl = isset($_GET['v']) ? trim((string) $_GET['v']) : '';
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body py-4">
-        <canvas id="qr-canvas" width="200" height="200" style="max-width:100%;"></canvas>
+        <div id="qr-code" class="d-inline-block"></div>
         <p class="mt-2 text-muted" style="font-size:.8rem;">Scan to open this video on your phone</p>
       </div>
     </div>
@@ -229,7 +240,7 @@ $sourceUrl = isset($_GET['v']) ? trim((string) $_GET['v']) : '';
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script src="assets/js/player.js" defer></script>
 
 </body>
