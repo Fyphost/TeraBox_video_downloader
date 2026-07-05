@@ -1,0 +1,18 @@
+# Block direct access to API directory listing
+Options -Indexes
+
+# Only allow POST requests to download.php
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Block GET requests to download.php (only POST allowed)
+  RewriteCond %{REQUEST_METHOD} !^POST$
+  RewriteRule ^download\.php$ - [F,L]
+</IfModule>
+
+# Security headers for API responses
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Cache-Control "no-store, no-cache, must-revalidate"
+</IfModule>

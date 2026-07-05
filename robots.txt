@@ -1,0 +1,15 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# TeraBox Downloader – Robots.txt
+# ═══════════════════════════════════════════════════════════════════════════════
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /config.php
+Disallow: /.htaccess
+
+# Sitemap location (update with your domain)
+Sitemap: https://yourdomain.com/sitemap.xml
+
+# Crawl delay (optional – be respectful to bots)
+Crawl-delay: 5
