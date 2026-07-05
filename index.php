@@ -258,7 +258,7 @@ $canonicalUrl = $siteUrl . '/';
 
           <!-- Action buttons -->
           <div class="action-buttons">
-            <a id="btn-stream" class="btn-action btn-secondary-action" href="#" target="_blank" rel="noopener">
+            <a id="btn-stream" class="btn-action btn-secondary-action" href="player.php" rel="noopener">
               <i class="bi bi-play-circle-fill"></i> Watch Online
             </a>
             <a id="btn-dl" class="btn-action btn-primary-action" href="#" target="_blank" rel="noopener" download>

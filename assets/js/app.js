@@ -125,10 +125,16 @@ function initEventListeners() {
     copyToClipboard(DOM.btnDl()?.href, 'Download link copied!');
   });
   DOM.btnCopyStream()?.addEventListener('click', () => {
-    copyToClipboard(DOM.btnStream()?.href, 'Stream link copied!');
+    copyToClipboard(getStreamUrl(currentData), 'Stream link copied!');
   });
 
-  // Play overlay click → show video player
+  // "Watch Online" → open the dedicated player page (with instant handoff)
+  DOM.btnStream()?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openPlayerPage();
+  });
+
+  // Play overlay / thumbnail click → quick inline preview
   DOM.playOverlay()?.addEventListener('click', () => showVideoPlayer());
   DOM.resultThumb()?.addEventListener('click', () => showVideoPlayer());
 
@@ -240,13 +246,14 @@ function displayResult(data) {
 
   // Buttons
   const dlUrl = getCurrentDownloadUrl(data);
-  const streamUrl = data.stream || data.download || '#';
 
   const btnDl = DOM.btnDl();
   if (btnDl) btnDl.href = sanitizeUrl(dlUrl);
 
+  // "Watch Online" always points at the dedicated player page.
+  // The actual stream URL is passed via sessionStorage handoff on click.
   const btnStream = DOM.btnStream();
-  if (btnStream) btnStream.href = sanitizeUrl(streamUrl);
+  if (btnStream) btnStream.href = 'player.php';
 
   // Show section
   section.style.display = 'block';
@@ -302,6 +309,38 @@ function getCurrentDownloadUrl(data) {
 function hideResult() {
   const section = DOM.resultSection();
   if (section) section.style.display = 'none';
+}
+
+// Resolve the best stream URL for a fetched video
+function getStreamUrl(data) {
+  if (!data) return '#';
+  return data.stream || data.download || '#';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEDICATED PLAYER PAGE HANDOFF
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Store the current video in sessionStorage and navigate to the player page.
+// This lets player.php start instantly without re-hitting the API.
+function openPlayerPage() {
+  if (!currentData || !getStreamUrl(currentData) || getStreamUrl(currentData) === '#') {
+    showToast('Unavailable', 'No stream is available for this video.', 'warning');
+    return;
+  }
+
+  try {
+    sessionStorage.setItem('tbdl_player', JSON.stringify({
+      data: currentData,
+      source: DOM.videoUrl()?.value?.trim() || '',
+      time: Date.now(),
+    }));
+  } catch { /* sessionStorage may be unavailable – player will re-fetch via ?v= */ }
+
+  // Pass the original link as a fallback so the player can re-fetch if needed
+  const source = DOM.videoUrl()?.value?.trim() || '';
+  const target = source ? `player.php?v=${encodeURIComponent(source)}` : 'player.php';
+  window.location.href = target;
 }
 
 

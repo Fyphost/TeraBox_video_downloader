@@ -949,3 +949,82 @@ footer {
   background: linear-gradient(90deg, var(--primary), transparent);
   margin-top: 18px;
 }
+
+
+/* ── Dedicated Player Page ───────────────────────────────────── */
+.player-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-main { flex: 1 0 auto; }
+
+/* Video stage */
+.player-stage {
+  background: #000;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  aspect-ratio: 16/9;
+  animation: fadeIn .4s ease both;
+}
+
+#player-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+  border-radius: var(--radius-lg);
+}
+
+/* Info bar below the video */
+.player-info-bar {
+  margin-top: 1.75rem;
+  animation: fadeInUp .5s ease both;
+}
+
+.player-title {
+  font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+  font-weight: 800;
+  letter-spacing: -.5px;
+  color: var(--text);
+  word-break: break-word;
+  margin: 0;
+}
+
+/* Controls card */
+.player-controls-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-card);
+}
+
+/* Error state */
+.player-error-icon {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: rgba(220, 53, 69, .12);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.25rem;
+  animation: pulse-ring 1.8s ease infinite;
+}
+
+/* Player page footer sits at the bottom */
+.player-page footer { flex-shrink: 0; }
+
+@media (max-width: 991.98px) {
+  .player-controls-card { margin-top: .5rem; }
+}
+
+@media (max-width: 575.98px) {
+  .player-stage { border-radius: var(--radius); }
+  #player-video { border-radius: var(--radius); }
+}
