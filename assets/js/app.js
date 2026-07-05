@@ -23,8 +23,6 @@ const DOM = {
   alertContainer: () => document.getElementById('alert-container'),
   historySection: () => document.getElementById('history-section'),
   historyList:    () => document.getElementById('history-list'),
-  videoPlayerSec: () => document.getElementById('video-player-section'),
-  videoPlayer:    () => document.getElementById('video-player'),
 
   // Result elements
   resultThumb:    () => document.getElementById('result-thumb'),
@@ -52,12 +50,11 @@ const DOM = {
   scrollTop:      () => document.getElementById('scroll-top'),
   navbar:         () => document.getElementById('mainNavbar'),
   clearHistory:   () => document.getElementById('clear-history'),
-  qrCanvas:       () => document.getElementById('qr-canvas'),
+  qrBox:          () => document.getElementById('qr-code'),
 };
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let currentData = null;   // Holds latest fetched video data
-let hlsInstance = null;   // HLS.js instance
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const HISTORY_KEY     = 'tbdl_history';
@@ -120,17 +117,26 @@ function initEventListeners() {
     }
   });
 
-  // Copy buttons
+  // Copy buttons — "Copy Link" copies our clean system URL (/video/{id}),
+  // NOT the long third-party download link. "Copy Stream" gives the raw
+  // stream URL for use in external players.
   DOM.btnCopyDl()?.addEventListener('click', () => {
-    copyToClipboard(DOM.btnDl()?.href, 'Download link copied!');
+    copyToClipboard(getSystemShareUrl(), 'Link copied!');
   });
   DOM.btnCopyStream()?.addEventListener('click', () => {
-    copyToClipboard(DOM.btnStream()?.href, 'Stream link copied!');
+    copyToClipboard(getStreamUrl(currentData), 'Stream link copied!');
   });
 
-  // Play overlay click → show video player
-  DOM.playOverlay()?.addEventListener('click', () => showVideoPlayer());
-  DOM.resultThumb()?.addEventListener('click', () => showVideoPlayer());
+  // "Watch Online" → open the dedicated player page (with instant handoff)
+  DOM.btnStream()?.addEventListener('click', (e) => {
+    e.preventDefault();
+    openPlayerPage();
+  });
+
+  // Play overlay / thumbnail click → open the dedicated player page
+  // (there is no inline player on the home screen anymore)
+  DOM.playOverlay()?.addEventListener('click', () => openPlayerPage());
+  DOM.resultThumb()?.addEventListener('click', () => openPlayerPage());
 
   // Quality change
   DOM.qualityDropdown()?.addEventListener('change', handleQualityChange);
@@ -161,7 +167,6 @@ async function handleDownload() {
   // Clear previous results / errors
   hideAlert();
   hideResult();
-  hideVideoPlayer();
 
   // Client-side validation (server also validates)
   if (!url) {
@@ -195,10 +200,11 @@ async function handleDownload() {
       throw new Error(json.error || `Server error (HTTP ${response.status})`);
     }
 
-    // Success – display result
+    // Success – update history first (changes layout below the result), then
+    // reveal + scroll to the video overview so the scroll target is accurate.
     currentData = json.data;
-    displayResult(currentData);
     addToHistory(currentData, url);
+    displayResult(currentData);
     showToast('Success!', 'Video link fetched successfully.', 'success');
 
   } catch (err) {
@@ -240,17 +246,26 @@ function displayResult(data) {
 
   // Buttons
   const dlUrl = getCurrentDownloadUrl(data);
-  const streamUrl = data.stream || data.download || '#';
 
   const btnDl = DOM.btnDl();
   if (btnDl) btnDl.href = sanitizeUrl(dlUrl);
 
+  // "Watch Online" always points at the dedicated player page.
+  // The actual stream URL is passed via sessionStorage handoff on click.
   const btnStream = DOM.btnStream();
-  if (btnStream) btnStream.href = sanitizeUrl(streamUrl);
+  if (btnStream) btnStream.href = 'player.php';
 
-  // Show section
+  // Show section, then scroll to the video overview once layout has settled.
+  // Deferring to the next frame + offsetting for the fixed navbar prevents the
+  // page from overshooting past the result into the "Recent Downloads" area.
   section.style.display = 'block';
-  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  requestAnimationFrame(() => {
+    const navH = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--navbar-h'), 10
+    ) || 64;
+    const top = section.getBoundingClientRect().top + window.scrollY - navH - 12;
+    window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+  });
 }
 
 function populateQualityDropdown(data) {
@@ -304,76 +319,43 @@ function hideResult() {
   if (section) section.style.display = 'none';
 }
 
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// VIDEO PLAYER (HLS.js + Fallback)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function showVideoPlayer() {
-  if (!currentData) return;
-
-  const streamUrl = currentData.stream || currentData.download;
-  if (!streamUrl) return;
-
-  const playerSection = DOM.videoPlayerSec();
-  const video = DOM.videoPlayer();
-  if (!playerSection || !video) return;
-
-  // Destroy previous HLS instance
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
-
-  playerSection.style.display = 'block';
-
-  // Determine if URL is HLS (.m3u8)
-  const isHLS = streamUrl.includes('.m3u8') || streamUrl.includes('m3u8');
-
-  if (isHLS && window.Hls && Hls.isSupported()) {
-    // Use HLS.js
-    hlsInstance = new Hls({
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
-      startLevel: -1,  // auto
-    });
-    hlsInstance.loadSource(streamUrl);
-    hlsInstance.attachMedia(video);
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-      // Don't autoplay
-      video.pause();
-    });
-    hlsInstance.on(Hls.Events.ERROR, (_, data) => {
-      if (data.fatal) {
-        showToast('Player Error', 'Failed to load video stream.', 'danger');
-      }
-    });
-  } else if (video.canPlayType('application/vnd.apple.mpegurl') && isHLS) {
-    // Native HLS support (Safari)
-    video.src = streamUrl;
-    video.addEventListener('loadedmetadata', () => video.pause(), { once: true });
-  } else {
-    // Direct playback (mp4 etc.)
-    video.src = sanitizeUrl(streamUrl);
-  }
-
-  // Scroll to player
-  playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+// Resolve the best stream URL for a fetched video
+function getStreamUrl(data) {
+  if (!data) return '#';
+  return data.stream || data.download || '#';
 }
 
-function hideVideoPlayer() {
-  const playerSection = DOM.videoPlayerSec();
-  const video = DOM.videoPlayer();
-  if (playerSection) playerSection.style.display = 'none';
-  if (video) {
-    video.pause();
-    video.src = '';
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEDICATED PLAYER PAGE HANDOFF
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Store the current video in sessionStorage and navigate to the player page.
+// This lets player.php start instantly without re-hitting the API.
+function openPlayerPage() {
+  if (!currentData || !getStreamUrl(currentData) || getStreamUrl(currentData) === '#') {
+    showToast('Unavailable', 'No stream is available for this video.', 'warning');
+    return;
   }
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
+
+  const source = DOM.videoUrl()?.value?.trim() || '';
+
+  try {
+    // Instant handoff — persists across navigation so playback starts without
+    // a second API call, even though the address bar shows the pretty URL.
+    sessionStorage.setItem('tbdl_player', JSON.stringify({
+      data: currentData,
+      source,
+      time: Date.now(),
+    }));
+  } catch { /* sessionStorage may be unavailable – player will re-fetch */ }
+
+  // Navigate with a RELATIVE url so the player page always loads, regardless of
+  // server rewrite config or install sub-directory. (The pretty /video/{id} URL
+  // is still produced for Copy Link / Share / QR via getSystemShareUrl.)
+  const target = source ? `player.php?v=${encodeURIComponent(source)}` : 'player.php';
+  window.location.href = target;
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOADING STATE
@@ -649,10 +631,45 @@ function timeAgo(timestamp) {
 // SHARE BUTTONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Extract the clean TeraBox share id (surl without the leading "1") from a URL.
+// e.g. https://terabox.com/s/1Vq9Bq0Nq0V8hZe → "Vq9Bq0Nq0V8hZe"
+function getTeraboxId(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    let surl = u.searchParams.get('surl') || '';
+    if (!surl) {
+      const m = u.pathname.match(/\/s\/([A-Za-z0-9_-]+)/);
+      if (m) {
+        surl = m[1];
+      } else {
+        const seg = u.pathname.split('/').filter(Boolean).pop();
+        if (seg) surl = seg;
+      }
+    }
+    surl = surl.replace(/[^A-Za-z0-9_-]/g, '');
+    return surl.replace(/^1/, '');
+  } catch { return ''; }
+}
+
+// Build a clean, branded, shareable link that points at OUR system
+// (e.g. https://oursite.com/video/Vq9Bq0Nq0V8hZe) — never the raw
+// third-party download link.
+function getSystemShareUrl() {
+  const origin = window.location.origin;
+  const source = DOM.videoUrl()?.value?.trim() || '';
+  const id = getTeraboxId(source);
+
+  if (id) return origin + '/video/' + id;
+  // Fallback: player page with the raw source (if id couldn't be parsed)
+  if (source) return origin + '/player.php?v=' + encodeURIComponent(source);
+  return origin + '/';
+}
+
 function shareOn(platform) {
-  const dlUrl = DOM.btnDl()?.href || window.location.href;
-  const text  = `Download this TeraBox video in HD: ${currentData?.name || 'Video'}`;
-  const encoded = encodeURIComponent(dlUrl);
+  const shareTarget = getSystemShareUrl();          // our system URL, not the direct link
+  const text  = `Watch & download this TeraBox video in HD: ${currentData?.name || 'Video'}`;
+  const encoded = encodeURIComponent(shareTarget);
   const encodedText = encodeURIComponent(text);
 
   let shareUrl = '';
@@ -684,23 +701,23 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function generateQR() {
-  const canvas = DOM.qrCanvas();
-  const dlUrl  = DOM.btnDl()?.href;
-  if (!canvas || !dlUrl || dlUrl === '#') return;
+  const box = DOM.qrBox();
+  if (!box) return;
 
-  // Use the QRCode library loaded from CDN
-  if (typeof QRCode !== 'undefined') {
-    QRCode.toCanvas(canvas, dlUrl, {
-      width: 200,
-      margin: 2,
-      color: {
-        dark:  '#0d6efd',
-        light: '#ffffff',
-      }
-    }, (err) => {
-      if (err) console.error('QR generation error:', err);
-    });
-  }
+  // Encode our short system URL (/video/{id}) as a QR image. Using an image
+  // service (allowed by CSP img-src https:) is far more reliable across
+  // environments than loading a JS QR library.
+  const qrTarget = getSystemShareUrl();
+  box.innerHTML = '<div class="text-muted small py-4">Generating…</div>';
+
+  const img = new Image(220, 220);
+  img.alt = 'QR code';
+  img.onload  = () => { box.innerHTML = ''; box.appendChild(img); };
+  img.onerror = () => {
+    box.innerHTML = '<p class="text-danger small mb-0">Could not generate the QR code. Please try again.</p>';
+  };
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10' +
+            '&color=0d6efd&bgcolor=ffffff&data=' + encodeURIComponent(qrTarget);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -234,7 +234,8 @@ $canonicalUrl = $siteUrl . '/';
                alt="Video Thumbnail"
                loading="lazy"
                src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMjAyNjM1Ii8+PC9zdmc+">
-          <div class="thumbnail-overlay" id="play-overlay">
+          <!-- Clicking the thumbnail opens the dedicated player page (no inline playback on home) -->
+          <div class="thumbnail-overlay" id="play-overlay" title="Watch online">
             <div class="play-btn-overlay"><i class="bi bi-play-fill"></i></div>
           </div>
         </div>
@@ -258,7 +259,7 @@ $canonicalUrl = $siteUrl . '/';
 
           <!-- Action buttons -->
           <div class="action-buttons">
-            <a id="btn-stream" class="btn-action btn-secondary-action" href="#" target="_blank" rel="noopener">
+            <a id="btn-stream" class="btn-action btn-secondary-action" href="player.php" rel="noopener">
               <i class="bi bi-play-circle-fill"></i> Watch Online
             </a>
             <a id="btn-dl" class="btn-action btn-primary-action" href="#" target="_blank" rel="noopener" download>
@@ -285,13 +286,6 @@ $canonicalUrl = $siteUrl . '/';
       </div>
 
     </div>
-  </div>
-
-  <!-- ── Video Player ────────────────────────────────────────── -->
-  <div id="video-player-section" class="mt-4">
-    <video id="video-player" controls preload="metadata" playsinline>
-      Your browser does not support the video element.
-    </video>
   </div>
 </section>
 
@@ -533,8 +527,8 @@ $canonicalUrl = $siteUrl . '/';
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body py-4">
-        <canvas id="qr-canvas" width="200" height="200" style="max-width:100%;"></canvas>
-        <p class="mt-2 text-muted" style="font-size:.8rem;">Scan to download on mobile</p>
+        <div id="qr-code" class="d-inline-block"></div>
+        <p class="mt-2 text-muted" style="font-size:.8rem;">Scan to open this video on your phone</p>
       </div>
     </div>
   </div>
@@ -567,12 +561,6 @@ $canonicalUrl = $siteUrl . '/';
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous" defer></script>
-
-<!-- HLS.js for video streaming -->
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js" defer></script>
-
-<!-- QRCode library (lightweight) -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" defer></script>
 
 <!-- App JS -->
 <script src="assets/js/app.js" defer></script>
