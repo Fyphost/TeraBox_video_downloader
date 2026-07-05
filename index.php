@@ -562,9 +562,6 @@ $canonicalUrl = $siteUrl . '/';
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous" defer></script>
 
-<!-- QRCode library (reliable, renders into #qr-code) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
-
 <!-- App JS -->
 <script src="assets/js/app.js" defer></script>
 

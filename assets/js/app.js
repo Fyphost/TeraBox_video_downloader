@@ -349,11 +349,10 @@ function openPlayerPage() {
     }));
   } catch { /* sessionStorage may be unavailable – player will re-fetch */ }
 
-  // Navigate to the clean /video/{id} URL when we can parse an id.
-  const id = getTeraboxId(source);
-  const target = id
-    ? `/video/${id}`
-    : (source ? `player.php?v=${encodeURIComponent(source)}` : 'player.php');
+  // Navigate with a RELATIVE url so the player page always loads, regardless of
+  // server rewrite config or install sub-directory. (The pretty /video/{id} URL
+  // is still produced for Copy Link / Share / QR via getSystemShareUrl.)
+  const target = source ? `player.php?v=${encodeURIComponent(source)}` : 'player.php';
   window.location.href = target;
 }
 
@@ -705,36 +704,20 @@ function generateQR() {
   const box = DOM.qrBox();
   if (!box) return;
 
-  // Encode our short system URL (/video/{id}) — short + always scannable.
+  // Encode our short system URL (/video/{id}) as a QR image. Using an image
+  // service (allowed by CSP img-src https:) is far more reliable across
+  // environments than loading a JS QR library.
   const qrTarget = getSystemShareUrl();
-  box.innerHTML = '';
+  box.innerHTML = '<div class="text-muted small py-4">Generating…</div>';
 
-  // Primary: qrcodejs (renders a canvas + img into the container element).
-  if (typeof QRCode !== 'undefined' && QRCode.CorrectLevel) {
-    try {
-      new QRCode(box, {
-        text: qrTarget,
-        width: 200,
-        height: 200,
-        colorDark: '#0d6efd',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M,
-      });
-      return;
-    } catch (e) {
-      console.error('QR library error:', e);
-    }
-  }
-
-  // Fallback: external QR image service (allowed by CSP img-src https:).
-  const img = document.createElement('img');
-  img.width = 200;
-  img.height = 200;
+  const img = new Image(220, 220);
   img.alt = 'QR code';
-  img.loading = 'lazy';
-  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' +
-            encodeURIComponent(qrTarget);
-  box.appendChild(img);
+  img.onload  = () => { box.innerHTML = ''; box.appendChild(img); };
+  img.onerror = () => {
+    box.innerHTML = '<p class="text-danger small mb-0">Could not generate the QR code. Please try again.</p>';
+  };
+  img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10' +
+            '&color=0d6efd&bgcolor=ffffff&data=' + encodeURIComponent(qrTarget);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

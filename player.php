@@ -240,7 +240,6 @@ $canonicalUrl = $videoId !== '' ? ($siteUrl . '/video/' . $videoId) : ($siteUrl 
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script src="assets/js/player.js" defer></script>
 
 </body>
