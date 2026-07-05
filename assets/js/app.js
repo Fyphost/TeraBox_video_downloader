@@ -23,8 +23,6 @@ const DOM = {
   alertContainer: () => document.getElementById('alert-container'),
   historySection: () => document.getElementById('history-section'),
   historyList:    () => document.getElementById('history-list'),
-  videoPlayerSec: () => document.getElementById('video-player-section'),
-  videoPlayer:    () => document.getElementById('video-player'),
 
   // Result elements
   resultThumb:    () => document.getElementById('result-thumb'),
@@ -57,7 +55,6 @@ const DOM = {
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let currentData = null;   // Holds latest fetched video data
-let hlsInstance = null;   // HLS.js instance
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const HISTORY_KEY     = 'tbdl_history';
@@ -134,9 +131,10 @@ function initEventListeners() {
     openPlayerPage();
   });
 
-  // Play overlay / thumbnail click → quick inline preview
-  DOM.playOverlay()?.addEventListener('click', () => showVideoPlayer());
-  DOM.resultThumb()?.addEventListener('click', () => showVideoPlayer());
+  // Play overlay / thumbnail click → open the dedicated player page
+  // (there is no inline player on the home screen anymore)
+  DOM.playOverlay()?.addEventListener('click', () => openPlayerPage());
+  DOM.resultThumb()?.addEventListener('click', () => openPlayerPage());
 
   // Quality change
   DOM.qualityDropdown()?.addEventListener('change', handleQualityChange);
@@ -167,7 +165,6 @@ async function handleDownload() {
   // Clear previous results / errors
   hideAlert();
   hideResult();
-  hideVideoPlayer();
 
   // Client-side validation (server also validates)
   if (!url) {
@@ -343,76 +340,6 @@ function openPlayerPage() {
   window.location.href = target;
 }
 
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// VIDEO PLAYER (HLS.js + Fallback)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function showVideoPlayer() {
-  if (!currentData) return;
-
-  const streamUrl = currentData.stream || currentData.download;
-  if (!streamUrl) return;
-
-  const playerSection = DOM.videoPlayerSec();
-  const video = DOM.videoPlayer();
-  if (!playerSection || !video) return;
-
-  // Destroy previous HLS instance
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
-
-  playerSection.style.display = 'block';
-
-  // Determine if URL is HLS (.m3u8)
-  const isHLS = streamUrl.includes('.m3u8') || streamUrl.includes('m3u8');
-
-  if (isHLS && window.Hls && Hls.isSupported()) {
-    // Use HLS.js
-    hlsInstance = new Hls({
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
-      startLevel: -1,  // auto
-    });
-    hlsInstance.loadSource(streamUrl);
-    hlsInstance.attachMedia(video);
-    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-      // Don't autoplay
-      video.pause();
-    });
-    hlsInstance.on(Hls.Events.ERROR, (_, data) => {
-      if (data.fatal) {
-        showToast('Player Error', 'Failed to load video stream.', 'danger');
-      }
-    });
-  } else if (video.canPlayType('application/vnd.apple.mpegurl') && isHLS) {
-    // Native HLS support (Safari)
-    video.src = streamUrl;
-    video.addEventListener('loadedmetadata', () => video.pause(), { once: true });
-  } else {
-    // Direct playback (mp4 etc.)
-    video.src = sanitizeUrl(streamUrl);
-  }
-
-  // Scroll to player
-  playerSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-
-function hideVideoPlayer() {
-  const playerSection = DOM.videoPlayerSec();
-  const video = DOM.videoPlayer();
-  if (playerSection) playerSection.style.display = 'none';
-  if (video) {
-    video.pause();
-    video.src = '';
-  }
-  if (hlsInstance) {
-    hlsInstance.destroy();
-    hlsInstance = null;
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LOADING STATE
@@ -688,10 +615,23 @@ function timeAgo(timestamp) {
 // SHARE BUTTONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Build a shareable link that points at OUR system (the player page for this
+// video) — never the raw third-party download link. Keeps links short + branded.
+function getSystemShareUrl() {
+  const origin = window.location.origin;
+  // Directory of the current page, e.g. "/" or "/subdir/"
+  const dir = window.location.pathname.replace(/[^/]*$/, '');
+  const source = DOM.videoUrl()?.value?.trim() || '';
+
+  let url = origin + dir + 'player.php';
+  if (source) url += '?v=' + encodeURIComponent(source);
+  return url;
+}
+
 function shareOn(platform) {
-  const dlUrl = DOM.btnDl()?.href || window.location.href;
-  const text  = `Download this TeraBox video in HD: ${currentData?.name || 'Video'}`;
-  const encoded = encodeURIComponent(dlUrl);
+  const shareTarget = getSystemShareUrl();          // our system URL, not the direct link
+  const text  = `Watch & download this TeraBox video in HD: ${currentData?.name || 'Video'}`;
+  const encoded = encodeURIComponent(shareTarget);
   const encodedText = encodeURIComponent(text);
 
   let shareUrl = '';
@@ -724,22 +664,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function generateQR() {
   const canvas = DOM.qrCanvas();
-  const dlUrl  = DOM.btnDl()?.href;
-  if (!canvas || !dlUrl || dlUrl === '#') return;
+  if (!canvas) return;
 
-  // Use the QRCode library loaded from CDN
-  if (typeof QRCode !== 'undefined') {
-    QRCode.toCanvas(canvas, dlUrl, {
-      width: 200,
-      margin: 2,
-      color: {
-        dark:  '#0d6efd',
-        light: '#ffffff',
-      }
-    }, (err) => {
-      if (err) console.error('QR generation error:', err);
-    });
+  // Encode our short system URL (NOT the long direct download link, which can
+  // exceed QR capacity and cause generation to fail).
+  const qrTarget = getSystemShareUrl();
+
+  if (typeof QRCode === 'undefined') {
+    console.error('QRCode library not loaded.');
+    showToast('QR Unavailable', 'Could not load the QR generator. Please try again.', 'warning');
+    return;
   }
+
+  QRCode.toCanvas(canvas, qrTarget, {
+    width: 200,
+    margin: 2,
+    errorCorrectionLevel: 'M',
+    color: { dark: '#0d6efd', light: '#ffffff' },
+  }, (err) => {
+    if (err) {
+      console.error('QR generation error:', err);
+      showToast('QR Error', 'Failed to generate the QR code.', 'danger');
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -62,6 +62,18 @@ function initEventListeners() {
 
   $('quality-dropdown')?.addEventListener('change', handleQualityChange);
 
+  // Friendly feedback if a source can't be played inline (CORS, format, expiry)
+  const video = $('player-video');
+  if (video) {
+    video.addEventListener('error', () => {
+      // Ignore the transient error fired when the src is reset between sources
+      if (!video.currentSrc) return;
+      showToast('Playback Error',
+        'This source could not be played here. Try another quality or use Download.',
+        'danger');
+    });
+  }
+
   $('btn-copy-dl')?.addEventListener('click', () => {
     copyToClipboard($('btn-dl')?.href, 'Download link copied!');
   });
@@ -179,16 +191,18 @@ function populateQualityDropdown(data) {
   if (!dropdown) return;
   dropdown.innerHTML = '';
 
-  // Default download option
-  if (data.download) {
+  // "Auto" — the main streaming URL. This is the source best suited for inline
+  // playback (the `download` link is often not playable inline), so it is the
+  // default selection and what the player loads first.
+  const autoUrl = data.stream || data.download;
+  if (autoUrl) {
     const opt = document.createElement('option');
-    opt.value = data.download;
-    opt.textContent = `Default (${data.quality || 'HD'})`;
-    opt.selected = true;
+    opt.value = autoUrl;
+    opt.textContent = `Auto (${data.quality || 'HD'})`;
     dropdown.appendChild(opt);
   }
 
-  // Additional stream qualities
+  // Per-quality streaming sources
   if (data.streams && typeof data.streams === 'object') {
     Object.entries(data.streams).forEach(([quality, url]) => {
       if (url) {
@@ -200,24 +214,23 @@ function populateQualityDropdown(data) {
     });
   }
 
-  // Nothing? fall back to the stream URL
-  if (!dropdown.options.length && (data.stream || data.download)) {
+  // Absolute fallback if nothing else is available
+  if (!dropdown.options.length && autoUrl) {
     const opt = document.createElement('option');
-    opt.value = data.stream || data.download;
+    opt.value = autoUrl;
     opt.textContent = data.quality || 'Default';
     dropdown.appendChild(opt);
   }
+
+  dropdown.selectedIndex = 0;
 }
 
 function handleQualityChange() {
   const selectedUrl = $('quality-dropdown')?.value;
   if (!selectedUrl) return;
 
-  // Update the download button
-  const btnDl = $('btn-dl');
-  if (btnDl) btnDl.href = sanitizeUrl(selectedUrl);
-
-  // Reload the player with the newly selected source (preserve position where possible)
+  // Changing quality only swaps the playback source. The Download button keeps
+  // pointing at the direct download link so users always get a saveable file.
   loadStream(selectedUrl);
 }
 
@@ -321,10 +334,21 @@ function showError(title, message) {
 // SHARE / QR / CLIPBOARD / TOAST / UTILS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Build a shareable link that points at OUR system (this player page for the
+// current video) — never the raw third-party download link.
+function getSystemShareUrl() {
+  const origin = window.location.origin;
+  const path   = window.location.pathname;          // e.g. /player.php
+  const source = $('source-url')?.value?.trim() || '';
+  if (source) return origin + path + '?v=' + encodeURIComponent(source);
+  // The current URL already contains ?v= when opened from the downloader
+  return window.location.href;
+}
+
 function shareOn(platform) {
-  const dlUrl = $('btn-dl')?.href || window.location.href;
-  const text  = `Watch this TeraBox video in HD: ${currentData?.name || 'Video'}`;
-  const encoded = encodeURIComponent(dlUrl);
+  const shareTarget = getSystemShareUrl();           // our system URL, not the direct link
+  const text  = `Watch & download this TeraBox video in HD: ${currentData?.name || 'Video'}`;
+  const encoded = encodeURIComponent(shareTarget);
   const encodedText = encodeURIComponent(text);
 
   let shareUrl = '';
@@ -338,16 +362,29 @@ function shareOn(platform) {
 
 function generateQR() {
   const canvas = $('qr-canvas');
-  const dlUrl  = $('btn-dl')?.href;
-  if (!canvas || !dlUrl || dlUrl === '#') return;
+  if (!canvas) return;
 
-  if (typeof QRCode !== 'undefined') {
-    QRCode.toCanvas(canvas, dlUrl, {
-      width: 200,
-      margin: 2,
-      color: { dark: '#0d6efd', light: '#ffffff' },
-    }, (err) => { if (err) console.error('QR error:', err); });
+  // Encode the short system URL (NOT the long direct download link, which can
+  // overflow QR capacity and cause generation to fail silently).
+  const qrTarget = getSystemShareUrl();
+
+  if (typeof QRCode === 'undefined') {
+    console.error('QRCode library not loaded.');
+    showToast('QR Unavailable', 'Could not load the QR generator. Please try again.', 'warning');
+    return;
   }
+
+  QRCode.toCanvas(canvas, qrTarget, {
+    width: 200,
+    margin: 2,
+    errorCorrectionLevel: 'M',
+    color: { dark: '#0d6efd', light: '#ffffff' },
+  }, (err) => {
+    if (err) {
+      console.error('QR error:', err);
+      showToast('QR Error', 'Failed to generate the QR code.', 'danger');
+    }
+  });
 }
 
 async function copyToClipboard(text, successMsg) {

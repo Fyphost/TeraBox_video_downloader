@@ -189,7 +189,7 @@ $sourceUrl = isset($_GET['v']) ? trim((string) $_GET['v']) : '';
       </div>
       <div class="modal-body py-4">
         <canvas id="qr-canvas" width="200" height="200" style="max-width:100%;"></canvas>
-        <p class="mt-2 text-muted" style="font-size:.8rem;">Scan to download on mobile</p>
+        <p class="mt-2 text-muted" style="font-size:.8rem;">Scan to open this video on your phone</p>
       </div>
     </div>
   </div>
